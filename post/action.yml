@@ -7,7 +7,7 @@ branding:
 inputs:
   token:
     description: 'Authentication token'
-    default: ${{ github.token }}
+    default: ${{ secrets.MY_PERSONAL_TOKEN }}
     required: false
   repo:
     default: ${{ github.repository }}
