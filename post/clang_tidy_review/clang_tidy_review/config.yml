@@ -1,0 +1,15 @@
+repo: yulongbai-nov/review-bot-testing
+pr: 2
+build_dir: ./build
+base_dir: ./src
+clang_tidy_checks: '-*,performance-*,readability-*,bugprone-*,clang-analyzer-*,cppcoreguidelines-*,mpi-*,misc-*'
+config_file: CONFIG_FILE
+include: '*.[ch],*.[ch]xx,*.[ch]pp,*.[ch]++,*.cc,*.hh'
+exclude: ''
+apt_packages: ''
+cmake_command: ''
+max_comments: 25
+lgtm_comment_body: 'clang-tidy review says "All clean, LGTM! :+1:"'
+split_workflow: false
+annotations: false
+parallel: 0

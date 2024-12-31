@@ -6,15 +6,22 @@
 # See LICENSE for more information
 
 import argparse
+import pprint
 import re
 import subprocess
 from pathlib import Path
+from typing import Any, Optional
 
 from clang_tidy_review import (
+    MAX_ANNOTATIONS,
+    PRReview,
     PullRequest,
     add_auth_arguments,
     bool_argument,
+    convert_comment_to_annotations,
     create_review,
+    cull_comments,
+    decorate_comments,
     fix_absolute_paths,
     get_auth_from_arguments,
     message_group,
@@ -183,6 +190,89 @@ def main():
         post_review(
             pull_request, review, args.max_comments, lgtm_comment_body, args.dry_run
         )
+
+
+def post_review(
+    pull_request: PullRequest,
+    review: Optional[PRReview],
+    max_comments: int,
+    lgtm_comment_body: str,
+    dry_run: bool,
+) -> int:
+    print(
+        "Created the following review:\n", pprint.pformat(review, width=130), flush=True
+    )
+
+    if not review or review["comments"] == []:
+        print("No warnings to report, LGTM!")
+        if not dry_run:
+            pull_request.post_lgtm_comment(lgtm_comment_body)
+        return 0
+
+    total_comments = len(review["comments"])
+
+    set_output("total_comments", str(total_comments))
+
+    decorated_review = decorate_comments(review)
+
+    print("Removing already posted or extra comments", flush=True)
+    trimmed_review = cull_comments(pull_request, decorated_review, max_comments)
+
+    if not trimmed_review["comments"]:
+        print("Everything already posted!")
+        return total_comments
+
+    if dry_run:
+        pprint.pprint(review, width=130)
+        return total_comments
+
+    print("Posting the review:\n", pprint.pformat(trimmed_review), flush=True)
+    pull_request.post_review(trimmed_review)
+
+    return total_comments
+
+
+def post_annotations(
+    pull_request: PullRequest, review: Optional[PRReview]
+) -> Optional[int]:
+    """Post the first 10 comments in the review as annotations"""
+
+    body: dict[str, Any] = {
+        "name": "clang-tidy-review",
+        "head_sha": pull_request.pull_request.head.sha,
+        "status": "completed",
+        "conclusion": "success",
+    }
+
+    if review is None:
+        return None
+
+    if review["comments"] == []:
+        print("No warnings to report, LGTM!")
+        pull_request.post_annotations(body)
+
+    comments = []
+    for comment in review["comments"]:
+        first_line = comment["body"].splitlines()[0]
+        comments.append(
+            f"{comment['path']}:{comment.get('start_line', comment.get('line', 0))}: {first_line}"
+        )
+
+    total_comments = len(review["comments"])
+
+    body["conclusion"] = "neutral"
+    body["output"] = {
+        "title": "clang-tidy-review",
+        "summary": f"There were {total_comments} warnings",
+        "text": "\n".join(comments),
+        "annotations": [
+            convert_comment_to_annotations(comment)
+            for comment in review["comments"][:MAX_ANNOTATIONS]
+        ],
+    }
+
+    pull_request.post_annotations(body)
+    return total_comments
 
 
 if __name__ == "__main__":
